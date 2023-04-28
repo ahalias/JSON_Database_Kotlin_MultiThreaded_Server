@@ -8,12 +8,12 @@ import java.net.ServerSocket
 import kotlin.system.exitProcess
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.*
+import kotlinx.serialization.json.Json.Default.encodeToJsonElement
 import java.io.File
-
+import java.util.concurrent.locks.Lock
+import java.util.concurrent.locks.ReadWriteLock
+import java.util.concurrent.locks.ReentrantReadWriteLock
 
 
 class Db(private val server: ServerSocket) : Thread() {
@@ -22,6 +22,8 @@ class Db(private val server: ServerSocket) : Thread() {
     private val output = DataOutputStream(socket.getOutputStream())
     private val dir = File("src/server/data")
     val dbJSON = File("${dir}/db.json")
+    val lock: ReadWriteLock = ReentrantReadWriteLock()
+    val writeLock: Lock = lock.writeLock()
 
 
 
@@ -66,8 +68,16 @@ class Db(private val server: ServerSocket) : Thread() {
             }
             "SET" -> {
                 try {
-                    val entry = Json.encodeToString<Map<String, String>>(mapOf(inMessage["key"]!! to inMessage["value"]!!))
-                    dbJSON.writeText(entry)
+                    val key = inMessage["key"]
+                    val value = inMessage["value"]
+                    val jsonStr = dbJSON.readText()
+                    val json = Json.parseToJsonElement(jsonStr).jsonObject.toMutableMap()
+                    val newValue = Json.encodeToJsonElement(value as String)
+                    json.put(key as String, newValue)
+                    val updatedJsonStr = Json.encodeToString(json)
+                    writeLock.lock()
+                    dbJSON.writeText(updatedJsonStr)
+                    writeLock.unlock()
                     serializeAndSend("OK", "")
                 } catch(e: Exception) {
                     serializeAndSend("ERROR", "No such key")
@@ -93,7 +103,9 @@ class Db(private val server: ServerSocket) : Thread() {
                     val mutableJson = json.toMutableMap()
                     mutableJson.remove(inMessage["key"])
                     val newJsonStr = Json.encodeToString(JsonObject(mutableJson))
+                    writeLock.lock()
                     dbJSON.writeText(newJsonStr)
+                    writeLock.unlock()
                     serializeAndSend("OK", "")
                 } else {
                     serializeAndSend("ERROR", "No such key")
