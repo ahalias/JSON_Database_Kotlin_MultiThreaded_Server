@@ -1,0 +1,5 @@
+# Project exclude paths
+/.gradle/
+/JSON Database (Kotlin)/task/build/
+/JSON Database (Kotlin)/task/out/
+/JSON Database (Kotlin)/task/out/production/classes/
